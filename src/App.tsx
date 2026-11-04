@@ -7,7 +7,6 @@ import { TeamScreen } from './components/TeamScreen.tsx';
 
 export default function App() {
   const [role, setRole] = useState<'LOBBY' | 'HOST' | 'TEAM'>('LOBBY');
-  const [pendingDemo, setPendingDemo] = useState(false);
 
   const {
     isConnected,
@@ -87,28 +86,6 @@ export default function App() {
     }
   }, [joinAsHost]);
 
-  // Handle Quick Demo Mode
-  const handleQuickDemo = () => {
-    const demoRoomId = 'DEMO' + Math.floor(100 + Math.random() * 900);
-    joinAsHost(demoRoomId);
-    setRole('HOST');
-    setPendingDemo(true);
-    try {
-      sessionStorage.setItem(
-        SESSION_KEY,
-        JSON.stringify({ role: 'HOST', roomId: demoRoomId })
-      );
-    } catch {}
-  };
-
-  // Populate AI teams when demo room connects
-  useEffect(() => {
-    if (pendingDemo && roomState && roomState.teams.length === 0) {
-      hostAddAI(4);
-      setPendingDemo(false);
-    }
-  }, [pendingDemo, roomState, hostAddAI]);
-
   const handleJoinAsHost = (roomId: string) => {
     joinAsHost(roomId);
     setRole('HOST');
@@ -162,7 +139,6 @@ export default function App() {
           <Lobby
             onJoinAsHost={handleJoinAsHost}
             onJoinAsTeam={handleJoinAsTeam}
-            onQuickDemo={handleQuickDemo}
           />
         ) : role === 'HOST' ? (
           <HostScreen

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { PRESET_BRANDS } from '../utils/constants.ts';
 import type { RoomState } from '../types/game.ts';
 import { LocalRoomEngine } from '../utils/localSync.ts';
-import { Users, Monitor, Sparkles, ArrowRight, BookOpen, ShieldCheck, Play, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Users, Monitor, ArrowRight, CheckCircle2, AlertCircle } from 'lucide-react';
 
 interface Props {
   onJoinAsHost: (roomId: string) => void;
@@ -10,10 +10,9 @@ interface Props {
     roomId: string,
     teamInfo: { teamNumber: number; name: string; members: string; brandTag: string }
   ) => void;
-  onQuickDemo: () => void;
 }
 
-export const Lobby: React.FC<Props> = ({ onJoinAsHost, onJoinAsTeam, onQuickDemo }) => {
+export const Lobby: React.FC<Props> = ({ onJoinAsHost, onJoinAsTeam }) => {
   // Read room query param from URL if student scanned QR code
   const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
   const initialRoom = urlParams?.get('room')?.toUpperCase() || '';
@@ -110,28 +109,6 @@ export const Lobby: React.FC<Props> = ({ onJoinAsHost, onJoinAsTeam, onQuickDemo
             在「禁止私下溝通」與「開放跨組協商」的情境下定價。
             你會守信協議開 450 元？還是偷偷背叛殺到 200 元獨吞全班訂單？
           </p>
-        </div>
-
-        {/* Quick Demo Banner for instant testing */}
-        <div className="bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 rounded-2xl p-4 sm:p-5 text-white shadow-lg flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="p-3 bg-white/20 rounded-xl backdrop-blur-xs">
-              <Sparkles className="w-6 h-6 text-amber-100" />
-            </div>
-            <div>
-              <h3 className="font-bold text-base sm:text-lg">老師備課 / 快速單機演練</h3>
-              <p className="text-xs sm:text-sm text-amber-100">
-                無需連線其他手機，一鍵載入 4 家預設衛生紙品牌直接體驗完整賽局流程！
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={onQuickDemo}
-            className="w-full sm:w-auto px-5 py-2.5 bg-white text-amber-800 hover:bg-amber-50 font-black rounded-xl shadow-md transition-all flex items-center justify-center gap-2 text-sm shrink-0 active:scale-95"
-          >
-            <Play className="w-4 h-4 fill-amber-700 text-amber-700" />
-            一鍵開啟演示房間
-          </button>
         </div>
 
         {/* Main Tab Card */}
