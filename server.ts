@@ -251,11 +251,11 @@ class RoomManager {
         totalSoldUnits: 0,
         roundHistory: [],
         reflection: {
-          r1r2Concern: '擔心其他人破盤開低價，若開 450 會完全賣不掉。',
-          r3r4Cheating: '表面約定 450，但若偷偷開 400 或 200 能獨吞全場市場。',
-          producerBenefit: '全員一致開 450 元時生產者利潤最大。',
-          consumerBenefit: '全員殺到 200 元時消費者受益最大。',
-          governmentRole: '依《公平交易法》嚴查聯合行為，處罰不實散布與哄抬。',
+          r1r2Concern: '',
+          r3r4Cheating: '',
+          producerBenefit: '',
+          consumerBenefit: '',
+          governmentRole: '',
         },
       };
 

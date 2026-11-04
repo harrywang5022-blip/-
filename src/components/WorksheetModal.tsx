@@ -20,22 +20,24 @@ export const WorksheetModal: React.FC<Props> = ({
   readOnly = false,
 }) => {
   const [reflection, setReflection] = useState<TeamReflection>(() => ({
-    r1r2Concern:
-      team.reflection?.r1r2Concern ||
-      '害怕其他組開低價搶走所有訂單，若我們開 450 元將完全賣不掉，導致銷量與利潤為 0。',
-    r3r4Cheating:
-      team.reflection?.r3r4Cheating ||
-      '大家口頭上協議好開 450 元，但只要有人偷偷開 400 或 200，就能一人獨吞 1200 箱市場，獲得巨大利潤誘惑！',
-    producerBenefit:
-      team.reflection?.producerBenefit ||
-      '所有廠商達成一致協議且都不背叛，全員開出 450 元時，生產者利潤最大化（瓜分高額毛利）。',
-    consumerBenefit:
-      team.reflection?.consumerBenefit ||
-      '廠商陷入劇烈價格競爭，全員開出 200 元保本底價時，消費者受益最大（買到最便宜衛生紙）。',
-    governmentRole:
-      team.reflection?.governmentRole ||
-      '政府主管機關（如公平交易委員會）依《公平交易法》嚴查事業間的「聯合行為（卡特爾）」、禁止不實散布漲價謠言與哄抬物價，維持自由競爭以保護消費者權益。',
+    r1r2Concern: team.reflection?.r1r2Concern || '',
+    r3r4Cheating: team.reflection?.r3r4Cheating || '',
+    producerBenefit: team.reflection?.producerBenefit || '',
+    consumerBenefit: team.reflection?.consumerBenefit || '',
+    governmentRole: team.reflection?.governmentRole || '',
   }));
+
+  React.useEffect(() => {
+    if (team.reflection) {
+      setReflection({
+        r1r2Concern: team.reflection.r1r2Concern || '',
+        r3r4Cheating: team.reflection.r3r4Cheating || '',
+        producerBenefit: team.reflection.producerBenefit || '',
+        consumerBenefit: team.reflection.consumerBenefit || '',
+        governmentRole: team.reflection.governmentRole || '',
+      });
+    }
+  }, [team.reflection]);
 
   const [copied, setCopied] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -296,9 +298,9 @@ ${[1, 2, 3, 4]
               <textarea
                 value={reflection.r1r2Concern}
                 onChange={(e) => handleTextChange('r1r2Concern', e.target.value)}
-                rows={2}
+                rows={3}
                 disabled={readOnly}
-                placeholder="請輸入小組思考..."
+                placeholder="請小組討論：為什麼不敢貿然開出 450 元高價？害怕發生什麼後果？"
                 className="w-full text-xs sm:text-sm p-3 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:outline-hidden"
               />
             </div>
@@ -311,9 +313,9 @@ ${[1, 2, 3, 4]
               <textarea
                 value={reflection.r3r4Cheating}
                 onChange={(e) => handleTextChange('r3r4Cheating', e.target.value)}
-                rows={2}
+                rows={3}
                 disabled={readOnly}
-                placeholder="請描述跨組協商時的情形與動機..."
+                placeholder="請小組討論：跨組協商時達成了什麼共識？開盤後有人偷降價嗎？背叛者的動機與誘因是什麼？"
                 className="w-full text-xs sm:text-sm p-3 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:outline-hidden"
               />
             </div>
@@ -335,6 +337,7 @@ ${[1, 2, 3, 4]
                     value={reflection.producerBenefit}
                     onChange={(e) => handleTextChange('producerBenefit', e.target.value)}
                     disabled={readOnly}
+                    placeholder="請小組討論後寫下：何種價格情境或市場狀態下，生產者（廠商）利潤最大？"
                     className="w-full p-2.5 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:outline-hidden"
                   />
                 </div>
@@ -348,6 +351,7 @@ ${[1, 2, 3, 4]
                     value={reflection.consumerBenefit}
                     onChange={(e) => handleTextChange('consumerBenefit', e.target.value)}
                     disabled={readOnly}
+                    placeholder="請小組討論後寫下：何種價格競爭情況下，消費者獲益最大？"
                     className="w-full p-2.5 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:outline-hidden"
                   />
                 </div>
@@ -361,6 +365,7 @@ ${[1, 2, 3, 4]
                     value={reflection.governmentRole}
                     onChange={(e) => handleTextChange('governmentRole', e.target.value)}
                     disabled={readOnly}
+                    placeholder="請小組討論後寫下：政府主管機關（如公平會、消保處）可採取哪些具體措施保障消費者？"
                     className="w-full p-2.5 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:outline-hidden"
                   />
                 </div>

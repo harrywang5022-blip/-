@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { PRESET_BRANDS } from '../utils/constants.ts';
 import type { RoomState } from '../types/game.ts';
+import { LocalRoomEngine } from '../utils/localSync.ts';
 import { Users, Monitor, Sparkles, ArrowRight, BookOpen, ShieldCheck, Play, CheckCircle2, AlertCircle } from 'lucide-react';
 
 interface Props {
@@ -43,12 +44,14 @@ export const Lobby: React.FC<Props> = ({ onJoinAsHost, onJoinAsTeam, onQuickDemo
     const timer = setTimeout(() => {
       fetch(`/api/rooms/${encodeURIComponent(cleanRoom)}`)
         .then((res) => (res.ok ? res.json() : null))
+        .catch(() => null)
         .then((data: RoomState | null) => {
-          if (data && data.roomId) {
-            setRoomPreview(data);
+          const roomData = data && data.roomId ? data : LocalRoomEngine.getRoom(cleanRoom);
+          if (roomData && roomData.roomId) {
+            setRoomPreview(roomData);
             // If user hasn't explicitly chosen a team number, auto-select first available slot!
-            if (!userChangedTeamManually && data.teams && data.teams.length > 0) {
-              const taken = new Set(data.teams.map((t) => t.teamNumber));
+            if (!userChangedTeamManually && roomData.teams && roomData.teams.length > 0) {
+              const taken = new Set(roomData.teams.map((t) => t.teamNumber));
               let firstFree = 1;
               while (taken.has(firstFree) && firstFree < 12) {
                 firstFree++;
@@ -58,8 +61,7 @@ export const Lobby: React.FC<Props> = ({ onJoinAsHost, onJoinAsTeam, onQuickDemo
           } else {
             setRoomPreview(null);
           }
-        })
-        .catch(() => {});
+        });
     }, 300);
 
     return () => clearTimeout(timer);

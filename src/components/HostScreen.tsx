@@ -853,32 +853,20 @@ export const HostScreen: React.FC<Props> = ({
                 const getAnswerText = () => {
                   switch (selectedReflectionQ) {
                     case 'r1r2':
-                      return (
-                        team.reflection?.r1r2Concern ||
-                        '害怕其他組開低價搶單，若開 450 元將完全賣不掉。'
-                      );
+                      return team.reflection?.r1r2Concern;
                     case 'r3r4':
-                      return (
-                        team.reflection?.r3r4Cheating ||
-                        '口頭約定 450，但只要偷開 400 或 200，就能一人獨吞 1200 箱市場。'
-                      );
+                      return team.reflection?.r3r4Cheating;
                     case 'producer':
-                      return (
-                        team.reflection?.producerBenefit ||
-                        '全員開出 450 元高價時，生產者利潤最大化。'
-                      );
+                      return team.reflection?.producerBenefit;
                     case 'consumer':
-                      return (
-                        team.reflection?.consumerBenefit ||
-                        '全員殺到 200 元保本底價時，消費者受益最大。'
-                      );
+                      return team.reflection?.consumerBenefit;
                     case 'gov':
-                      return (
-                        team.reflection?.governmentRole ||
-                        '依《公平交易法》嚴懲聯合行為與不實宣傳，維護市場競爭。'
-                      );
+                      return team.reflection?.governmentRole;
                   }
                 };
+
+                const answerContent = getAnswerText();
+                const hasAnswered = !!answerContent && answerContent.trim().length > 0;
 
                 return (
                   <div
@@ -901,8 +889,12 @@ export const HostScreen: React.FC<Props> = ({
                           <Maximize2 className="w-3 h-3" /> 點擊放大
                         </span>
                       </div>
-                      <p className="text-xs sm:text-sm text-slate-200 leading-relaxed line-clamp-5">
-                        {getAnswerText()}
+                      <p
+                        className={`text-xs sm:text-sm leading-relaxed line-clamp-5 ${
+                          hasAnswered ? 'text-slate-100 font-medium' : 'text-slate-400 italic'
+                        }`}
+                      >
+                        {hasAnswered ? answerContent : '（小組討論中，尚未填寫回答...）'}
                       </p>
                     </div>
 

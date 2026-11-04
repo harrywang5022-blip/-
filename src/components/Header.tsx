@@ -74,18 +74,19 @@ export const Header: React.FC<Props> = ({
           <div className="flex items-center gap-2">
             {/* Connection badge */}
             <div
-              className={`flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full border ${
+              className={`flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-full border transition-all ${
                 isConnected
                   ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
-                  : 'bg-rose-50 text-rose-700 border-rose-300 animate-pulse'
+                  : 'bg-amber-50 text-amber-800 border-amber-300 animate-pulse'
               }`}
+              title={isConnected ? '伺服器即時同步已就緒' : '正在連線或切換備用通訊中...'}
             >
               <span
                 className={`w-2 h-2 rounded-full ${
-                  isConnected ? 'bg-emerald-500' : 'bg-rose-500'
+                  isConnected ? 'bg-emerald-500' : 'bg-amber-500'
                 }`}
               />
-              <span className="hidden sm:inline">
+              <span className="text-xs">
                 {isConnected ? '已連線' : '連線中...'}
               </span>
             </div>
