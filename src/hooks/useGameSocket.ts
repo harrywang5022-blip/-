@@ -9,6 +9,7 @@ import type {
 } from '../types/game.ts';
 import { sound } from '../utils/audio.ts';
 import { LocalRoomEngine } from '../utils/localSync.ts';
+import { PeerSyncEngine } from '../utils/peerSync.ts';
 
 export function useGameSocket() {
   const [roomState, setRoomState] = useState<RoomState | null>(null);
@@ -16,13 +17,15 @@ export function useGameSocket() {
   const [isConnected, setIsConnected] = useState(false);
   const [isStaticMode, setIsStaticMode] = useState(false);
   const [lastError, setLastError] = useState<string | null>(null);
+  const [connectionNote, setConnectionNote] = useState<string | null>(null);
 
   const socketRef = useRef<WebSocket | null>(null);
   const pingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const currentRoomIdRef = useRef<string | null>(null);
   const pendingJoinRef = useRef<WSClientMessage | null>(null);
+  const isHostRef = useRef<boolean>(false);
 
-  // Initialize Local sync engine for GitHub Pages or offline fallback
+  // Initialize Local sync engine for cross-tab sync
   useEffect(() => {
     LocalRoomEngine.init();
     const unsub = LocalRoomEngine.subscribe((updatedRoom) => {
@@ -31,10 +34,54 @@ export function useGameSocket() {
         setIsConnected(true);
       }
     });
-    return () => unsub();
+
+    PeerSyncEngine.onStatusChange((status) => {
+      if (status.details) {
+        setConnectionNote(status.details);
+      }
+      if (status.connected) {
+        setIsConnected(true);
+      }
+    });
+
+    return () => {
+      unsub();
+      PeerSyncEngine.destroy();
+    };
   }, []);
 
-  const connect = useCallback(() => {
+  const handleIncomingServerMessage = useCallback((msg: WSServerMessage) => {
+    switch (msg.type) {
+      case 'ROOM_STATE':
+        setRoomState(msg.state);
+        setIsConnected(true);
+        if (msg.yourTeamId) {
+          setMyTeamId(msg.yourTeamId);
+        }
+        break;
+
+      case 'REVEAL_EFFECT':
+        sound.playGong();
+        if (msg.minPrice === 200) {
+          sound.playBuzzer();
+        } else {
+          sound.playCash();
+        }
+        break;
+
+      case 'TIMER_TICK':
+        setRoomState((prev) =>
+          prev ? { ...prev, negotiationSecondsRemaining: msg.seconds } : null
+        );
+        break;
+
+      case 'ERROR':
+        setLastError(msg.message);
+        break;
+    }
+  }, []);
+
+  const connectWebSocket = useCallback(() => {
     if (
       socketRef.current &&
       (socketRef.current.readyState === WebSocket.OPEN ||
@@ -43,7 +90,6 @@ export function useGameSocket() {
       return;
     }
 
-    // Check if WebSocket is supported and protocol is appropriate
     if (typeof window === 'undefined') return;
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -57,7 +103,6 @@ export function useGameSocket() {
         setIsConnected(true);
         setLastError(null);
 
-        // Ping keep-alive
         if (pingIntervalRef.current) clearInterval(pingIntervalRef.current);
         pingIntervalRef.current = setInterval(() => {
           if (ws.readyState === WebSocket.OPEN) {
@@ -65,7 +110,6 @@ export function useGameSocket() {
           }
         }, 15000);
 
-        // Re-send pending message if any
         if (pendingJoinRef.current) {
           ws.send(JSON.stringify(pendingJoinRef.current));
         }
@@ -74,62 +118,29 @@ export function useGameSocket() {
       ws.onmessage = (event) => {
         try {
           const msg = JSON.parse(event.data) as WSServerMessage;
-          switch (msg.type) {
-            case 'ROOM_STATE':
-              setRoomState(msg.state);
-              setIsConnected(true);
-              if (msg.yourTeamId) {
-                setMyTeamId(msg.yourTeamId);
-              }
-              break;
-
-            case 'REVEAL_EFFECT':
-              sound.playGong();
-              if (msg.minPrice === 200) {
-                sound.playBuzzer();
-              } else {
-                sound.playCash();
-              }
-              break;
-
-            case 'TIMER_TICK':
-              setRoomState((prev) =>
-                prev ? { ...prev, negotiationSecondsRemaining: msg.seconds } : null
-              );
-              break;
-
-            case 'ERROR':
-              setLastError(msg.message);
-              break;
-          }
+          handleIncomingServerMessage(msg);
         } catch (e) {
           console.error('Failed to parse WebSocket message:', e);
         }
       };
 
       ws.onclose = () => {
-        // When WebSocket drops, do NOT mark disconnected if HTTP polling or LocalEngine is working!
         if (pingIntervalRef.current) clearInterval(pingIntervalRef.current);
-        setTimeout(() => {
-          if (currentRoomIdRef.current && !isStaticMode) {
-            connect();
-          }
-        }, 3000);
       };
 
-      ws.onerror = (err) => {
-        console.warn('WebSocket connection not available (will use HTTP / Local sync):', err);
+      ws.onerror = () => {
+        // WebSocket not available (expected on static deployments like Vercel)
+        setIsStaticMode(true);
       };
-    } catch (e) {
-      console.warn('Failed to initialize WebSocket:', e);
+    } catch {
+      setIsStaticMode(true);
     }
-  }, [isStaticMode]);
+  }, [handleIncomingServerMessage]);
 
   // Initial connection probe on mount
   useEffect(() => {
-    // 1. Try checking /api/health
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 2500);
+    const timeoutId = setTimeout(() => controller.abort(), 2000);
 
     fetch('/api/health', { signal: controller.signal })
       .then((res) => {
@@ -137,16 +148,14 @@ export function useGameSocket() {
         if (res.ok) {
           setIsConnected(true);
           setIsStaticMode(false);
-          connect();
+          connectWebSocket();
         } else {
-          // Static host (like GitHub Pages where /api returns 404 or html)
           setIsStaticMode(true);
           setIsConnected(true);
         }
       })
       .catch(() => {
         clearTimeout(timeoutId);
-        // Could be static GitHub Pages or offline
         setIsStaticMode(true);
         setIsConnected(true);
       });
@@ -154,9 +163,9 @@ export function useGameSocket() {
     return () => {
       clearTimeout(timeoutId);
     };
-  }, [connect]);
+  }, [connectWebSocket]);
 
-  const sendMessage = useCallback((msg: WSClientMessage) => {
+  const sendWSMessage = useCallback((msg: WSClientMessage) => {
     if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
       socketRef.current.send(JSON.stringify(msg));
     } else {
@@ -170,40 +179,38 @@ export function useGameSocket() {
     (roomId: string) => {
       const cleanRoom = roomId.trim().toUpperCase();
       currentRoomIdRef.current = cleanRoom;
+      isHostRef.current = true;
 
-      if (isStaticMode) {
-        const room = LocalRoomEngine.getOrCreateRoom(cleanRoom);
-        setRoomState(room);
+      // Always initialize or load local room state
+      const initialRoom = LocalRoomEngine.getOrCreateRoom(cleanRoom);
+      setRoomState(initialRoom);
+      setIsConnected(true);
+
+      // Start WebRTC Peer Host for cross-device synchronization (works on Vercel, Netlify, GitHub Pages)
+      PeerSyncEngine.startHost(cleanRoom, (updatedState) => {
+        setRoomState({ ...updatedState });
         setIsConnected(true);
-        return;
+      });
+
+      // Also try WebSocket / API if running with persistent backend
+      if (!isStaticMode) {
+        const msg: WSClientMessage = { type: 'JOIN_HOST', roomId: cleanRoom };
+        pendingJoinRef.current = msg;
+        connectWebSocket();
+        sendWSMessage(msg);
+
+        fetch(`/api/rooms/${encodeURIComponent(cleanRoom)}`)
+          .then((res) => (res.ok ? res.json() : null))
+          .then((data: RoomState | null) => {
+            if (data && data.roomId) {
+              setRoomState(data);
+              setIsConnected(true);
+            }
+          })
+          .catch(() => {});
       }
-
-      const msg: WSClientMessage = { type: 'JOIN_HOST', roomId: cleanRoom };
-      pendingJoinRef.current = msg;
-      connect();
-      sendMessage(msg);
-
-      // Direct HTTP fetch to immediately load room state without waiting
-      fetch(`/api/rooms/${encodeURIComponent(cleanRoom)}`)
-        .then((res) => {
-          if (res.ok) return res.json();
-          throw new Error('API not available');
-        })
-        .then((data: RoomState) => {
-          if (data && data.roomId) {
-            setRoomState(data);
-            setIsConnected(true);
-          }
-        })
-        .catch(() => {
-          // If server fails, fallback to local room engine
-          setIsStaticMode(true);
-          const room = LocalRoomEngine.getOrCreateRoom(cleanRoom);
-          setRoomState(room);
-          setIsConnected(true);
-        });
     },
-    [connect, sendMessage, isStaticMode]
+    [connectWebSocket, sendWSMessage, isStaticMode]
   );
 
   const joinAsTeam = useCallback(
@@ -213,6 +220,7 @@ export function useGameSocket() {
     ) => {
       const cleanRoom = roomId.trim().toUpperCase();
       currentRoomIdRef.current = cleanRoom;
+      isHostRef.current = false;
 
       // Maintain persistent teamId in sessionStorage
       const storageKey = `civics_team_id_${cleanRoom}_n${teamInfo.teamNumber}`;
@@ -233,46 +241,39 @@ export function useGameSocket() {
       const fullTeamInfo = { ...teamInfo, teamId: assignedTeamId };
       setMyTeamId(assignedTeamId);
 
-      if (isStaticMode) {
-        const res = LocalRoomEngine.joinTeam(cleanRoom, fullTeamInfo);
-        setMyTeamId(res.team.id);
-        setRoomState(res.room);
-        setIsConnected(true);
-        return;
+      // Local registration for instant UI feedback
+      const localRes = LocalRoomEngine.joinTeam(cleanRoom, fullTeamInfo);
+      setRoomState(localRes.room);
+      setIsConnected(true);
+
+      const joinMsg: WSClientMessage = { type: 'JOIN_TEAM', roomId: cleanRoom, teamInfo: fullTeamInfo };
+      pendingJoinRef.current = joinMsg;
+
+      // Start WebRTC Peer Client to sync with Teacher's host screen across physical devices (Vercel)
+      PeerSyncEngine.startClient(cleanRoom, handleIncomingServerMessage, joinMsg);
+
+      // Also try WebSocket / API in full-stack mode
+      if (!isStaticMode) {
+        connectWebSocket();
+        sendWSMessage(joinMsg);
+
+        fetch(`/api/rooms/${encodeURIComponent(cleanRoom)}/join`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ teamInfo: fullTeamInfo }),
+        })
+          .then((res) => (res.ok ? res.json() : null))
+          .then((data) => {
+            if (data && data.team) {
+              setMyTeamId(data.team.id);
+              setRoomState(data.room);
+              setIsConnected(true);
+            }
+          })
+          .catch(() => {});
       }
-
-      const msg: WSClientMessage = { type: 'JOIN_TEAM', roomId: cleanRoom, teamInfo: fullTeamInfo };
-      pendingJoinRef.current = msg;
-      connect();
-      sendMessage(msg);
-
-      // HTTP fallback for guaranteed instant registration
-      fetch(`/api/rooms/${encodeURIComponent(cleanRoom)}/join`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ teamInfo: fullTeamInfo }),
-      })
-        .then((res) => {
-          if (res.ok) return res.json();
-          throw new Error('API join failed');
-        })
-        .then((data) => {
-          if (data && data.team) {
-            setMyTeamId(data.team.id);
-            setRoomState(data.room);
-            setIsConnected(true);
-          }
-        })
-        .catch(() => {
-          // Static host fallback
-          setIsStaticMode(true);
-          const res = LocalRoomEngine.joinTeam(cleanRoom, fullTeamInfo);
-          setMyTeamId(res.team.id);
-          setRoomState(res.room);
-          setIsConnected(true);
-        });
     },
-    [connect, sendMessage, isStaticMode]
+    [connectWebSocket, sendWSMessage, isStaticMode, handleIncomingServerMessage]
   );
 
   const submitBid = useCallback(
@@ -280,38 +281,40 @@ export function useGameSocket() {
       if (!roomState || !myTeamId) return;
       const roomId = roomState.roomId;
 
-      if (isStaticMode) {
-        const updated = LocalRoomEngine.submitBid(roomId, myTeamId, bid, agreedPrice);
-        setRoomState(updated);
-        sound.playPop();
-        return;
-      }
+      // Update local state immediately
+      const updated = LocalRoomEngine.submitBid(roomId, myTeamId, bid, agreedPrice);
+      setRoomState(updated);
+      sound.playPop();
 
-      sendMessage({
+      const msg: WSClientMessage = {
         type: 'SUBMIT_BID',
         roomId,
         teamId: myTeamId,
         bid,
         agreedPrice,
-      });
-      sound.playPop();
+      };
 
-      // HTTP fallback for guaranteed bid submission
-      fetch(`/api/rooms/${encodeURIComponent(roomId)}/bid`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ teamId: myTeamId, bid, agreedPrice }),
-      })
-        .then((res) => (res.ok ? res.json() : null))
-        .then((data) => {
-          if (data && data.room) {
-            setRoomState(data.room);
-            setIsConnected(true);
-          }
+      // Send via WebRTC DataChannel to Teacher's screen
+      PeerSyncEngine.sendFromClient(msg);
+
+      // Send via WebSocket / API
+      if (!isStaticMode) {
+        sendWSMessage(msg);
+        fetch(`/api/rooms/${encodeURIComponent(roomId)}/bid`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ teamId: myTeamId, bid, agreedPrice }),
         })
-        .catch(() => {});
+          .then((res) => (res.ok ? res.json() : null))
+          .then((data) => {
+            if (data && data.room) {
+              setRoomState(data.room);
+            }
+          })
+          .catch(() => {});
+      }
     },
-    [roomState, myTeamId, sendMessage, isStaticMode]
+    [roomState, myTeamId, sendWSMessage, isStaticMode]
   );
 
   const submitReflection = useCallback(
@@ -319,35 +322,37 @@ export function useGameSocket() {
       if (!roomState || !myTeamId) return;
       const roomId = roomState.roomId;
 
-      if (isStaticMode) {
-        const updated = LocalRoomEngine.submitReflection(roomId, myTeamId, reflection);
-        setRoomState(updated);
-        return;
-      }
+      // Update local state
+      const updated = LocalRoomEngine.submitReflection(roomId, myTeamId, reflection);
+      setRoomState(updated);
 
-      sendMessage({
+      const msg: WSClientMessage = {
         type: 'SUBMIT_REFLECTION',
         roomId,
         teamId: myTeamId,
         reflection,
-      });
+      };
 
-      // HTTP fallback
-      fetch(`/api/rooms/${encodeURIComponent(roomId)}/reflection`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ teamId: myTeamId, reflection }),
-      })
-        .then((res) => (res.ok ? res.json() : null))
-        .then((data) => {
-          if (data && data.room) {
-            setRoomState(data.room);
-            setIsConnected(true);
-          }
+      // Send via WebRTC to Teacher's screen
+      PeerSyncEngine.sendFromClient(msg);
+
+      if (!isStaticMode) {
+        sendWSMessage(msg);
+        fetch(`/api/rooms/${encodeURIComponent(roomId)}/reflection`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ teamId: myTeamId, reflection }),
         })
-        .catch(() => {});
+          .then((res) => (res.ok ? res.json() : null))
+          .then((data) => {
+            if (data && data.room) {
+              setRoomState(data.room);
+            }
+          })
+          .catch(() => {});
+      }
     },
-    [roomState, myTeamId, sendMessage, isStaticMode]
+    [roomState, myTeamId, sendWSMessage, isStaticMode]
   );
 
   const hostStartRound = useCallback(
@@ -355,175 +360,140 @@ export function useGameSocket() {
       if (!roomState) return;
       const roomId = roomState.roomId;
 
-      if (isStaticMode) {
-        const updated = LocalRoomEngine.startRound(roomId, round);
-        setRoomState(updated);
-        return;
+      const updated = LocalRoomEngine.startRound(roomId, round);
+      setRoomState(updated);
+
+      // Broadcast to all student devices via WebRTC
+      PeerSyncEngine.broadcastToAllStudents({
+        type: 'ROOM_STATE',
+        state: updated,
+      });
+
+      if (!isStaticMode) {
+        sendWSMessage({ type: 'HOST_START_ROUND', roomId, round });
+        fetch(`/api/rooms/${encodeURIComponent(roomId)}/start-round`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ round }),
+        }).catch(() => {});
       }
-
-      sendMessage({ type: 'HOST_START_ROUND', roomId, round });
-
-      // HTTP fallback
-      fetch(`/api/rooms/${encodeURIComponent(roomId)}/start-round`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ round }),
-      })
-        .then((res) => (res.ok ? res.json() : null))
-        .then((data) => {
-          if (data && data.room) {
-            setRoomState(data.room);
-            setIsConnected(true);
-          }
-        })
-        .catch((e) => console.warn('HTTP start-round fallback failed:', e));
     },
-    [roomState, sendMessage, isStaticMode]
+    [roomState, sendWSMessage, isStaticMode]
   );
 
   const hostForceReveal = useCallback(() => {
     if (!roomState) return;
     const roomId = roomState.roomId;
 
-    if (isStaticMode) {
-      sound.playDrumRoll();
-      const updated = LocalRoomEngine.settleRound(roomId);
-      setRoomState(updated);
-      return;
-    }
-
-    sendMessage({ type: 'HOST_FORCE_REVEAL', roomId });
     sound.playDrumRoll();
+    const updated = LocalRoomEngine.settleRound(roomId);
+    setRoomState(updated);
 
-    // HTTP fallback
-    fetch(`/api/rooms/${encodeURIComponent(roomId)}/force-reveal`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-    })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (data && data.room) {
-          setRoomState(data.room);
-          setIsConnected(true);
-        }
-      })
-      .catch(() => {});
-  }, [roomState, sendMessage, isStaticMode]);
+    // Broadcast to all student devices via WebRTC
+    PeerSyncEngine.broadcastToAllStudents({
+      type: 'ROOM_STATE',
+      state: updated,
+    });
+
+    if (!isStaticMode) {
+      sendWSMessage({ type: 'HOST_FORCE_REVEAL', roomId });
+      fetch(`/api/rooms/${encodeURIComponent(roomId)}/force-reveal`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      }).catch(() => {});
+    }
+  }, [roomState, sendWSMessage, isStaticMode]);
 
   const hostNextPhase = useCallback(() => {
     if (!roomState) return;
     const roomId = roomState.roomId;
 
-    if (isStaticMode) {
-      const updated = LocalRoomEngine.nextPhase(roomId);
-      setRoomState(updated);
-      return;
+    const updated = LocalRoomEngine.nextPhase(roomId);
+    setRoomState(updated);
+
+    PeerSyncEngine.broadcastToAllStudents({
+      type: 'ROOM_STATE',
+      state: updated,
+    });
+
+    if (!isStaticMode) {
+      sendWSMessage({ type: 'HOST_NEXT_PHASE', roomId });
+      fetch(`/api/rooms/${encodeURIComponent(roomId)}/next-phase`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      }).catch(() => {});
     }
-
-    sendMessage({ type: 'HOST_NEXT_PHASE', roomId });
-
-    // HTTP fallback
-    fetch(`/api/rooms/${encodeURIComponent(roomId)}/next-phase`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-    })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (data && data.room) {
-          setRoomState(data.room);
-          setIsConnected(true);
-        }
-      })
-      .catch(() => {});
-  }, [roomState, sendMessage, isStaticMode]);
+  }, [roomState, sendWSMessage, isStaticMode]);
 
   const hostAddAI = useCallback(
     (count = 2) => {
       if (!roomState) return;
       const roomId = roomState.roomId;
 
-      if (isStaticMode) {
-        const updated = LocalRoomEngine.addAI(roomId, count);
-        setRoomState(updated);
-        return;
+      const updated = LocalRoomEngine.addAI(roomId, count);
+      setRoomState(updated);
+
+      PeerSyncEngine.broadcastToAllStudents({
+        type: 'ROOM_STATE',
+        state: updated,
+      });
+
+      if (!isStaticMode) {
+        sendWSMessage({ type: 'HOST_ADD_AI_TEAMS', roomId, count });
+        fetch(`/api/rooms/${encodeURIComponent(roomId)}/add-ai`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ count }),
+        }).catch(() => {});
       }
-
-      sendMessage({ type: 'HOST_ADD_AI_TEAMS', roomId, count });
-
-      // HTTP fallback
-      fetch(`/api/rooms/${encodeURIComponent(roomId)}/add-ai`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ count }),
-      })
-        .then((res) => (res.ok ? res.json() : null))
-        .then((data) => {
-          if (data && data.room) {
-            setRoomState(data.room);
-            setIsConnected(true);
-          }
-        })
-        .catch(() => {});
     },
-    [roomState, sendMessage, isStaticMode]
+    [roomState, sendWSMessage, isStaticMode]
   );
 
   const hostReset = useCallback(() => {
     if (!roomState) return;
     const roomId = roomState.roomId;
 
-    if (isStaticMode) {
-      const updated = LocalRoomEngine.reset(roomId);
-      setRoomState(updated);
-      return;
+    const updated = LocalRoomEngine.reset(roomId);
+    setRoomState(updated);
+
+    PeerSyncEngine.broadcastToAllStudents({
+      type: 'ROOM_STATE',
+      state: updated,
+    });
+
+    if (!isStaticMode) {
+      sendWSMessage({ type: 'HOST_RESET_GAME', roomId });
+      fetch(`/api/rooms/${encodeURIComponent(roomId)}/reset`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      }).catch(() => {});
     }
-
-    sendMessage({ type: 'HOST_RESET_GAME', roomId });
-
-    // HTTP fallback
-    fetch(`/api/rooms/${encodeURIComponent(roomId)}/reset`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-    })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (data && data.room) {
-          setRoomState(data.room);
-          setIsConnected(true);
-        }
-      })
-      .catch(() => {});
-  }, [roomState, sendMessage, isStaticMode]);
+  }, [roomState, sendWSMessage, isStaticMode]);
 
   const hostKickTeam = useCallback(
     (teamId: string) => {
       if (!roomState) return;
       const roomId = roomState.roomId;
 
-      if (isStaticMode) {
-        const updated = LocalRoomEngine.kickTeam(roomId, teamId);
-        setRoomState(updated);
-        return;
+      const updated = LocalRoomEngine.kickTeam(roomId, teamId);
+      setRoomState(updated);
+
+      PeerSyncEngine.broadcastToAllStudents({
+        type: 'ROOM_STATE',
+        state: updated,
+      });
+
+      if (!isStaticMode) {
+        sendWSMessage({ type: 'HOST_KICK_TEAM', roomId, teamId });
+        fetch(`/api/rooms/${encodeURIComponent(roomId)}/kick-team`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ teamId }),
+        }).catch(() => {});
       }
-
-      sendMessage({ type: 'HOST_KICK_TEAM', roomId, teamId });
-
-      // HTTP fallback
-      fetch(`/api/rooms/${encodeURIComponent(roomId)}/kick-team`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ teamId }),
-      })
-        .then((res) => (res.ok ? res.json() : null))
-        .then((data) => {
-          if (data && data.room) {
-            setRoomState(data.room);
-            setIsConnected(true);
-          }
-        })
-        .catch(() => {});
     },
-    [roomState, sendMessage, isStaticMode]
+    [roomState, sendWSMessage, isStaticMode]
   );
 
   const hostSetTeamBid = useCallback(
@@ -531,32 +501,25 @@ export function useGameSocket() {
       if (!roomState) return;
       const roomId = roomState.roomId;
 
-      if (isStaticMode) {
-        const updated = LocalRoomEngine.submitBid(roomId, teamId, bid, agreedPrice);
-        setRoomState(updated);
-        sound.playPop();
-        return;
-      }
-
-      sendMessage({ type: 'HOST_SET_TEAM_BID', roomId, teamId, bid, agreedPrice });
+      const updated = LocalRoomEngine.submitBid(roomId, teamId, bid, agreedPrice);
+      setRoomState(updated);
       sound.playPop();
 
-      // HTTP fallback
-      fetch(`/api/rooms/${encodeURIComponent(roomId)}/set-team-bid`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ teamId, bid, agreedPrice }),
-      })
-        .then((res) => (res.ok ? res.json() : null))
-        .then((data) => {
-          if (data && data.room) {
-            setRoomState(data.room);
-            setIsConnected(true);
-          }
-        })
-        .catch(() => {});
+      PeerSyncEngine.broadcastToAllStudents({
+        type: 'ROOM_STATE',
+        state: updated,
+      });
+
+      if (!isStaticMode) {
+        sendWSMessage({ type: 'HOST_SET_TEAM_BID', roomId, teamId, bid, agreedPrice });
+        fetch(`/api/rooms/${encodeURIComponent(roomId)}/set-team-bid`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ teamId, bid, agreedPrice }),
+        }).catch(() => {});
+      }
     },
-    [roomState, sendMessage, isStaticMode]
+    [roomState, sendWSMessage, isStaticMode]
   );
 
   const hostStartTimer = useCallback(
@@ -564,66 +527,49 @@ export function useGameSocket() {
       if (!roomState) return;
       const roomId = roomState.roomId;
 
-      if (isStaticMode) {
-        const room = LocalRoomEngine.getOrCreateRoom(roomId);
-        room.negotiationSecondsRemaining = seconds;
-        room.isTimerRunning = true;
-        LocalRoomEngine.saveRoom(room);
-        setRoomState({ ...room });
-        return;
+      const room = LocalRoomEngine.getOrCreateRoom(roomId);
+      room.negotiationSecondsRemaining = seconds;
+      room.isTimerRunning = true;
+      LocalRoomEngine.saveRoom(room);
+      setRoomState({ ...room });
+
+      PeerSyncEngine.broadcastToAllStudents({
+        type: 'TIMER_TICK',
+        seconds,
+      });
+
+      if (!isStaticMode) {
+        sendWSMessage({ type: 'HOST_START_TIMER', roomId, seconds });
+        fetch(`/api/rooms/${encodeURIComponent(roomId)}/timer`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'start', seconds }),
+        }).catch(() => {});
       }
-
-      sendMessage({ type: 'HOST_START_TIMER', roomId, seconds });
-
-      // HTTP fallback
-      fetch(`/api/rooms/${encodeURIComponent(roomId)}/timer`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'start', seconds }),
-      })
-        .then((res) => (res.ok ? res.json() : null))
-        .then((data) => {
-          if (data && data.room) {
-            setRoomState(data.room);
-            setIsConnected(true);
-          }
-        })
-        .catch(() => {});
     },
-    [roomState, sendMessage, isStaticMode]
+    [roomState, sendWSMessage, isStaticMode]
   );
 
   const hostPauseTimer = useCallback(() => {
     if (!roomState) return;
     const roomId = roomState.roomId;
 
-    if (isStaticMode) {
-      const room = LocalRoomEngine.getOrCreateRoom(roomId);
-      room.isTimerRunning = false;
-      LocalRoomEngine.saveRoom(room);
-      setRoomState({ ...room });
-      return;
+    const room = LocalRoomEngine.getOrCreateRoom(roomId);
+    room.isTimerRunning = false;
+    LocalRoomEngine.saveRoom(room);
+    setRoomState({ ...room });
+
+    if (!isStaticMode) {
+      sendWSMessage({ type: 'HOST_PAUSE_TIMER', roomId });
+      fetch(`/api/rooms/${encodeURIComponent(roomId)}/timer`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'pause' }),
+      }).catch(() => {});
     }
+  }, [roomState, sendWSMessage, isStaticMode]);
 
-    sendMessage({ type: 'HOST_PAUSE_TIMER', roomId });
-
-    // HTTP fallback
-    fetch(`/api/rooms/${encodeURIComponent(roomId)}/timer`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'pause' }),
-    })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (data && data.room) {
-          setRoomState(data.room);
-          setIsConnected(true);
-        }
-      })
-      .catch(() => {});
-  }, [roomState, sendMessage, isStaticMode]);
-
-  // Polling fallback to guarantee state synchronization even if WebSocket drops or throttles
+  // Polling fallback when running full-stack backend
   useEffect(() => {
     if (isStaticMode) return;
 
@@ -636,7 +582,6 @@ export function useGameSocket() {
               setIsConnected(true);
               setRoomState((prev) => {
                 if (!prev) return data;
-                // Update if teams, status, round, timer or submission changed
                 const prevSubmitted = prev.teams.filter((t) => t.hasSubmitted).length;
                 const nextSubmitted = data.teams.filter((t) => t.hasSubmitted).length;
                 if (
@@ -677,6 +622,7 @@ export function useGameSocket() {
   return {
     isConnected,
     isStaticMode,
+    connectionNote,
     roomState,
     myTeamId,
     myTeam,

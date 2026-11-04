@@ -12,6 +12,7 @@ const BROADCAST_NAME = 'civics_paper_room_sync';
 export class LocalRoomEngine {
   private static channel: BroadcastChannel | null = null;
   private static listeners: Set<(room: RoomState) => void> = new Set();
+  private static memoryStore: Map<string, RoomState> = new Map();
 
   public static init() {
     if (typeof window === 'undefined') return;
@@ -20,6 +21,7 @@ export class LocalRoomEngine {
         this.channel = new BroadcastChannel(BROADCAST_NAME);
         this.channel.onmessage = (event) => {
           if (event.data && event.data.type === 'SYNC_ROOM' && event.data.room) {
+            this.memoryStore.set(event.data.room.roomId, event.data.room);
             this.notify(event.data.room);
           }
         };
@@ -32,6 +34,7 @@ export class LocalRoomEngine {
       if (e.key && e.key.startsWith('civics_room_state_') && e.newValue) {
         try {
           const room = JSON.parse(e.newValue) as RoomState;
+          this.memoryStore.set(room.roomId, room);
           this.notify(room);
         } catch {}
       }
@@ -52,6 +55,7 @@ export class LocalRoomEngine {
   }
 
   private static broadcast(room: RoomState) {
+    this.memoryStore.set(room.roomId, room);
     this.notify(room);
     if (this.channel) {
       try {
@@ -61,20 +65,27 @@ export class LocalRoomEngine {
   }
 
   public static getRoom(roomId: string): RoomState | null {
-    if (typeof window === 'undefined') return null;
     const cleanId = roomId.trim().toUpperCase();
+    if (this.memoryStore.has(cleanId)) {
+      return this.memoryStore.get(cleanId)!;
+    }
+    if (typeof window === 'undefined') return null;
     const stored = window.localStorage.getItem(`civics_room_state_${cleanId}`);
     if (stored) {
       try {
-        return JSON.parse(stored) as RoomState;
+        const parsed = JSON.parse(stored) as RoomState;
+        this.memoryStore.set(cleanId, parsed);
+        return parsed;
       } catch {}
     }
     return null;
   }
 
   public static saveRoom(room: RoomState) {
-    if (typeof window === 'undefined') return;
-    window.localStorage.setItem(`civics_room_state_${room.roomId}`, JSON.stringify(room));
+    this.memoryStore.set(room.roomId, room);
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(`civics_room_state_${room.roomId}`, JSON.stringify(room));
+    }
     this.broadcast(room);
   }
 

@@ -300,7 +300,7 @@ ${[1, 2, 3, 4]
                 onChange={(e) => handleTextChange('r1r2Concern', e.target.value)}
                 rows={3}
                 disabled={readOnly}
-                placeholder="請小組討論：為什麼不敢貿然開出 450 元高價？害怕發生什麼後果？"
+                placeholder="請在此輸入本組討論紀錄..."
                 className="w-full text-xs sm:text-sm p-3 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:outline-hidden"
               />
             </div>
@@ -315,7 +315,7 @@ ${[1, 2, 3, 4]
                 onChange={(e) => handleTextChange('r3r4Cheating', e.target.value)}
                 rows={3}
                 disabled={readOnly}
-                placeholder="請小組討論：跨組協商時達成了什麼共識？開盤後有人偷降價嗎？背叛者的動機與誘因是什麼？"
+                placeholder="請在此輸入本組討論紀錄..."
                 className="w-full text-xs sm:text-sm p-3 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:outline-hidden"
               />
             </div>
@@ -324,7 +324,7 @@ ${[1, 2, 3, 4]
             <div className="p-4 bg-amber-50/60 rounded-xl border border-amber-200 space-y-3">
               <label className="block text-sm font-bold text-amber-950 flex items-center gap-1.5">
                 <Sparkles className="w-4 h-4 text-amber-600" />
-                3. 公民與經濟學延伸深思
+                3. 討論與反思
               </label>
 
               <div className="space-y-3 text-xs sm:text-sm">
@@ -337,7 +337,7 @@ ${[1, 2, 3, 4]
                     value={reflection.producerBenefit}
                     onChange={(e) => handleTextChange('producerBenefit', e.target.value)}
                     disabled={readOnly}
-                    placeholder="請小組討論後寫下：何種價格情境或市場狀態下，生產者（廠商）利潤最大？"
+                    placeholder="請在此輸入本組討論紀錄..."
                     className="w-full p-2.5 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:outline-hidden"
                   />
                 </div>
@@ -351,21 +351,21 @@ ${[1, 2, 3, 4]
                     value={reflection.consumerBenefit}
                     onChange={(e) => handleTextChange('consumerBenefit', e.target.value)}
                     disabled={readOnly}
-                    placeholder="請小組討論後寫下：何種價格競爭情況下，消費者獲益最大？"
+                    placeholder="請在此輸入本組討論紀錄..."
                     className="w-full p-2.5 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:outline-hidden"
                   />
                 </div>
 
                 <div>
                   <span className="font-bold text-slate-800 block mb-1">
-                    (3) 政府要如何保障消費者受益最大？（例如公平交易法、聯合行為之規範）
+                    (3) 政府要如何保障消費者受益最大？
                   </span>
                   <textarea
                     rows={2}
                     value={reflection.governmentRole}
                     onChange={(e) => handleTextChange('governmentRole', e.target.value)}
                     disabled={readOnly}
-                    placeholder="請小組討論後寫下：政府主管機關（如公平會、消保處）可採取哪些具體措施保障消費者？"
+                    placeholder="請在此輸入本組討論紀錄..."
                     className="w-full p-2.5 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:outline-hidden"
                   />
                 </div>

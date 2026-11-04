@@ -843,7 +843,7 @@ export const HostScreen: React.FC<Props> = ({
                     : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
                 }`}
               >
-                5. 政府如何保障消費者（公平交易法）
+                5. 政府要如何保障消費者受益最大？
               </button>
             </div>
 
