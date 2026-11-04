@@ -1,0 +1,6 @@
+{
+  "name": "安屎之亂：衛生紙價格策略賽局",
+  "description": "公民課專用！「安屎之亂」衛生紙價格策略賽局與寡占市場/囚徒困境互動連線教學遊戲，支援大螢幕投影主控與學生跨載具連線、反思討論單與法規探討。",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
