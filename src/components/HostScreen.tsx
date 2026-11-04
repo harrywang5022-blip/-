@@ -26,9 +26,14 @@ import {
   Globe,
   Edit3,
   ExternalLink,
+  Download,
+  Printer,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { sound } from '../utils/audio.ts';
 import { getRecommendedShareOrigin, buildJoinUrl } from '../utils/url.ts';
+import { exportRoomDataToCSV } from '../utils/exportData.ts';
+import { PrintableReportModal } from './PrintableReportModal.tsx';
 
 interface Props {
   roomState: RoomState;
@@ -63,6 +68,7 @@ export const HostScreen: React.FC<Props> = ({
   const [customOriginInput, setCustomOriginInput] = useState<string>('');
   const [showPermissionModal, setShowPermissionModal] = useState<boolean>(false);
   const [showBoardInputModal, setShowBoardInputModal] = useState<boolean>(false);
+  const [showReportModal, setShowReportModal] = useState<boolean>(false);
 
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
   const [copied, setCopied] = useState(false);
@@ -186,13 +192,32 @@ export const HostScreen: React.FC<Props> = ({
 
           {/* Quick Host Operations */}
           <div className="flex items-center gap-2">
+            {/* Export data buttons */}
+            <button
+              onClick={() => exportRoomDataToCSV(roomState)}
+              title="匯出全班數據總結至 Excel / CSV"
+              className="px-3 py-2 bg-emerald-600/80 hover:bg-emerald-600 text-white text-xs font-bold rounded-xl transition-colors flex items-center gap-1.5 shadow-xs"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">匯出 CSV</span>
+            </button>
+
+            <button
+              onClick={() => setShowReportModal(true)}
+              title="查看並列印班級總結報告 (PDF)"
+              className="px-3 py-2 bg-slate-700 hover:bg-slate-600 text-amber-300 text-xs font-bold rounded-xl transition-colors flex items-center gap-1.5 shadow-xs"
+            >
+              <Printer className="w-3.5 h-3.5 text-amber-400" />
+              <span className="hidden sm:inline">總結報告</span>
+            </button>
+
             {/* Permission troubleshooting button */}
             <button
               onClick={() => setShowPermissionModal(true)}
               className="px-3 py-2 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-bold rounded-xl transition-colors flex items-center gap-1.5"
             >
               <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
-              <span>別人掃碼沒有權限？</span>
+              <span className="hidden md:inline">掃碼權限說明</span>
             </button>
 
             {roomState.status === 'LOBBY' && (
@@ -201,7 +226,7 @@ export const HostScreen: React.FC<Props> = ({
                 className="px-3 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs font-bold rounded-xl transition-colors flex items-center gap-1.5"
               >
                 <UserPlus className="w-3.5 h-3.5 text-amber-400" />
-                +2 模擬 AI 隊
+                +2 AI
               </button>
             )}
 
@@ -783,7 +808,23 @@ export const HostScreen: React.FC<Props> = ({
                 </p>
               </div>
 
-              <div className="flex gap-2">
+              <div className="flex flex-wrap items-center gap-2.5">
+                <button
+                  onClick={() => exportRoomDataToCSV(roomState)}
+                  className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl transition-all shadow-md flex items-center gap-1.5 active:scale-98"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>匯出全班數據 (CSV/Excel)</span>
+                </button>
+
+                <button
+                  onClick={() => setShowReportModal(true)}
+                  className="px-4 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black rounded-xl transition-all shadow-md flex items-center gap-1.5 active:scale-98"
+                >
+                  <Printer className="w-4 h-4" />
+                  <span>列印總結報告 (PDF)</span>
+                </button>
+
                 <button
                   onClick={() => onStartRound(1)}
                   className="px-4 py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs font-bold rounded-xl transition-colors"
@@ -1217,6 +1258,13 @@ export const HostScreen: React.FC<Props> = ({
             </div>
           </div>
         )}
+
+        {/* Modal 3: Printable Report & PDF Summary */}
+        <PrintableReportModal
+          isOpen={showReportModal}
+          onClose={() => setShowReportModal(false)}
+          roomState={roomState}
+        />
       </div>
 
       {/* Classroom Footer note */}

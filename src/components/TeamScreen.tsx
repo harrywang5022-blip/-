@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import type { RoomState, Team, BidPrice, TeamReflection } from '../types/game.ts';
 import { WorksheetModal } from './WorksheetModal.tsx';
+import { StudentSummaryView } from './StudentSummaryView.tsx';
 import {
   DollarSign,
   FileText,
@@ -91,22 +92,24 @@ export const TeamScreen: React.FC<Props> = ({
           </button>
         </div>
 
-        {/* Stats Pill Bar */}
-        <div className="grid grid-cols-2 gap-3 text-center">
-          <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-xs">
-            <div className="text-[11px] font-bold text-slate-400">累計淨獲利</div>
-            <div className="text-xl sm:text-2xl font-black font-mono text-amber-600">
-              ${team.totalProfit.toLocaleString()}
+        {/* Stats Pill Bar (shown during active game) */}
+        {!isDiscussion && (
+          <div className="grid grid-cols-2 gap-3 text-center">
+            <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-xs">
+              <div className="text-[11px] font-bold text-slate-400">累計淨獲利</div>
+              <div className="text-xl sm:text-2xl font-black font-mono text-amber-600">
+                ${team.totalProfit.toLocaleString()}
+              </div>
+            </div>
+            <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-xs">
+              <div className="text-[11px] font-bold text-slate-400">累計總銷量</div>
+              <div className="text-xl sm:text-2xl font-black font-mono text-slate-800">
+                {team.totalSoldUnits}{' '}
+                <span className="text-xs font-normal text-slate-400">箱</span>
+              </div>
             </div>
           </div>
-          <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-xs">
-            <div className="text-[11px] font-bold text-slate-400">累計總銷量</div>
-            <div className="text-xl sm:text-2xl font-black font-mono text-slate-800">
-              {team.totalSoldUnits}{' '}
-              <span className="text-xs font-normal text-slate-400">箱</span>
-            </div>
-          </div>
-        </div>
+        )}
 
         {/* STAGE 1: LOBBY */}
         {roomState.status === 'LOBBY' && (
@@ -366,25 +369,13 @@ export const TeamScreen: React.FC<Props> = ({
           </div>
         )}
 
-        {/* STAGE 4: DISCUSSION / GAME_OVER */}
+        {/* STAGE 4: DISCUSSION / GAME_OVER (Comprehensive Student End-game Summary) */}
         {isDiscussion && (
-          <div className="bg-white rounded-3xl p-6 sm:p-8 border-2 border-amber-300 shadow-xl space-y-5 text-center">
-            <div className="text-4xl">🎓</div>
-            <h3 className="text-2xl font-black text-slate-900">
-              賽局結束！進入全班核心反思討論
-            </h3>
-            <p className="text-xs sm:text-sm text-slate-600 max-w-md mx-auto leading-relaxed">
-              請組員立即點擊下方按鈕，填寫小組討論紀錄單的三大核心公民問題，並送出至前方大螢幕進行成果分享與法規探討！
-            </p>
-
-            <button
-              onClick={() => setShowWorksheet(true)}
-              className="w-full py-4 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white font-black text-base rounded-2xl shadow-xl shadow-amber-600/25 transition-all flex items-center justify-center gap-2"
-            >
-              <FileText className="w-5 h-5" />
-              填寫並提交小組討論紀錄單
-            </button>
-          </div>
+          <StudentSummaryView
+            roomState={roomState}
+            team={team}
+            onOpenWorksheet={() => setShowWorksheet(true)}
+          />
         )}
       </div>
 

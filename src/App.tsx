@@ -29,6 +29,44 @@ export default function App() {
     hostPauseTimer,
   } = useGameSocket();
 
+  // Session persistence key
+  const SESSION_KEY = 'civics_active_session_v1';
+
+  // Restore session on initial mount if available
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem(SESSION_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.role === 'TEAM' && parsed.roomId && parsed.teamInfo) {
+          joinAsTeam(parsed.roomId, parsed.teamInfo);
+          setRole('TEAM');
+        } else if (parsed.role === 'HOST' && parsed.roomId) {
+          joinAsHost(parsed.roomId);
+          setRole('HOST');
+        }
+      }
+    } catch {
+      // Ignore sessionStorage parsing errors
+    }
+  }, [joinAsTeam, joinAsHost]);
+
+  // Prevent accidental page leave / reload with beforeunload
+  useEffect(() => {
+    if (role === 'LOBBY') return;
+
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '您正在遊戲進行中，確定要離開嗎？';
+      return e.returnValue;
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [role]);
+
   // Check URL query parameters for auto room join (?room=TP88)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -39,6 +77,12 @@ export default function App() {
       if (roleParam === 'host') {
         joinAsHost(roomParam.toUpperCase());
         setRole('HOST');
+        try {
+          sessionStorage.setItem(
+            SESSION_KEY,
+            JSON.stringify({ role: 'HOST', roomId: roomParam.toUpperCase() })
+          );
+        } catch {}
       }
     }
   }, [joinAsHost]);
@@ -49,6 +93,12 @@ export default function App() {
     joinAsHost(demoRoomId);
     setRole('HOST');
     setPendingDemo(true);
+    try {
+      sessionStorage.setItem(
+        SESSION_KEY,
+        JSON.stringify({ role: 'HOST', roomId: demoRoomId })
+      );
+    } catch {}
   };
 
   // Populate AI teams when demo room connects
@@ -62,6 +112,9 @@ export default function App() {
   const handleJoinAsHost = (roomId: string) => {
     joinAsHost(roomId);
     setRole('HOST');
+    try {
+      sessionStorage.setItem(SESSION_KEY, JSON.stringify({ role: 'HOST', roomId }));
+    } catch {}
   };
 
   const handleJoinAsTeam = (
@@ -70,9 +123,18 @@ export default function App() {
   ) => {
     joinAsTeam(roomId, teamInfo);
     setRole('TEAM');
+    try {
+      sessionStorage.setItem(
+        SESSION_KEY,
+        JSON.stringify({ role: 'TEAM', roomId, teamInfo })
+      );
+    } catch {}
   };
 
   const handleExit = () => {
+    try {
+      sessionStorage.removeItem(SESSION_KEY);
+    } catch {}
     setRole('LOBBY');
     window.location.href = window.location.pathname;
   };
